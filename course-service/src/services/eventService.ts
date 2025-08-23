@@ -1,14 +1,27 @@
-import { createClient } from 'redis';
+import { createClient, RedisClientType } from 'redis';
 
-const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379'
-});
+let redisClient: RedisClientType | null = null;
 
-redisClient.connect();
+async function getRedisClient(): Promise<RedisClientType> {
+  if (redisClient && redisClient.isOpen) return redisClient;
+
+  const url = process.env.REDIS_URL || 'redis://redis:6379'; // sane in-docker default
+  redisClient = createClient({ url });
+
+  redisClient.on('error', (err) => {
+    console.error('Redis error:', err);
+  });
+
+  if (!redisClient.isOpen) {
+    await redisClient.connect();
+  }
+  return redisClient;
+}
 
 export const publishEvent = async (event: string, data: any): Promise<void> => {
   try {
-    await redisClient.publish('events', JSON.stringify({
+    const client = await getRedisClient();
+    await client.publish('events', JSON.stringify({
       event,
       data,
       timestamp: new Date().toISOString()

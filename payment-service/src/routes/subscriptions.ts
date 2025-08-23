@@ -14,19 +14,19 @@ const PLANS = {
   basic: {
     priceId: process.env.STRIPE_BASIC_PRICE_ID!,
     name: 'Basic Plan',
-    price: 9.99,
+    price: 0.01,
     features: ['Access to basic courses', 'Standard support']
   },
   premium: {
     priceId: process.env.STRIPE_PREMIUM_PRICE_ID!,
     name: 'Premium Plan',
-    price: 19.99,
+    price: 0.02,
     features: ['Access to all courses', 'Priority support', 'Certificates']
   },
   enterprise: {
     priceId: process.env.STRIPE_ENTERPRISE_PRICE_ID!,
     name: 'Enterprise Plan',
-    price: 49.99,
+    price: 0.03,
     features: ['Everything in Premium', 'Team management', 'Analytics']
   }
 };

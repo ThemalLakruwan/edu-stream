@@ -24,11 +24,11 @@ router.post('/stripe', async (req, res) => {
     switch (event.type) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated':
-        await handleSubscriptionUpdate(event.data.object as Stripe.Subscription);
+        await handleSubscriptionUpdate(event.data.object as any);
         break;
         
       case 'customer.subscription.deleted':
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        await handleSubscriptionDeleted(event.data.object as any);
         break;
         
       case 'invoice.payment_succeeded':
