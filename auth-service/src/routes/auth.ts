@@ -7,16 +7,25 @@ import { redisClient } from '../config/redis';
 
 const router = express.Router();
 
-// Google OAuth routes
+// Google OAuth routes - Fixed the callback URL issue
 router.get('/google',
   passport.authenticate('google', { scope: ['profile', 'email'] })
 );
 
 router.get('/google/callback',
-  passport.authenticate('google', { session: false }),
+  passport.authenticate('google', { 
+    session: false,
+    failureRedirect: `${process.env.FRONTEND_URL}/auth/error`
+  }),
   async (req, res) => {
     try {
       const user = req.user as any;
+      
+      if (!user) {
+        console.error('No user in callback');
+        return res.redirect(`${process.env.FRONTEND_URL}/auth/error`);
+      }
+
       const token = jwt.sign(
         { 
           userId: user._id, 
@@ -30,8 +39,11 @@ router.get('/google/callback',
       // Store token in Redis for session management
       await redisClient.setEx(`session:${user._id}`, 24 * 60 * 60, token);
 
-      // Redirect to frontend with token
-      res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`);
+      // Redirect to frontend with token - This is the key fix
+      const redirectUrl = `${process.env.FRONTEND_URL}/auth/success?token=${encodeURIComponent(token)}`;
+      console.log('Redirecting to:', redirectUrl);
+      
+      res.redirect(redirectUrl);
     } catch (error) {
       console.error('Auth callback error:', error);
       res.redirect(`${process.env.FRONTEND_URL}/auth/error`);

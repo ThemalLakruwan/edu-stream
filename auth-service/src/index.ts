@@ -1,3 +1,4 @@
+// auth-service/src/index.ts - FIXED VERSION
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -31,11 +32,12 @@ app.use(limiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Passport configuration
+// Passport configuration - FIXED callback URL
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID!,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-  callbackURL: "/auth/google/callback"
+  // This should match your API gateway routing
+  callbackURL: "/api/auth/google/callback"
 }, async (accessToken, refreshToken, profile, done) => {
   try {
     let user = await User.findOne({ googleId: profile.id });
@@ -53,6 +55,7 @@ passport.use(new GoogleStrategy({
       return done(null, user);
     }
   } catch (error) {
+    console.error('Google strategy error:', error);
     return done(error, false);
   }
 }));
@@ -60,7 +63,7 @@ passport.use(new GoogleStrategy({
 app.use(passport.initialize());
 
 // Routes
-app.use('/auth', authRoutes);
+app.use('/', authRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -71,10 +74,24 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Root endpoint for API Gateway discovery
+app.get('/', (req, res) => {
+  res.json({ 
+    message: "EduStream Auth Service", 
+    endpoints: {
+      "google_auth": "/google",
+      "callback": "/google/callback", 
+      "me": "/me",
+      "logout": "/logout",
+      "refresh": "/refresh"
+    }
+  });
+});
+
 // Error handling middleware
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Something went wrong!' });
+  console.error('Auth service error:', err.stack);
+  res.status(500).json({ error: 'Authentication service error' });
 });
 
 // Start server
