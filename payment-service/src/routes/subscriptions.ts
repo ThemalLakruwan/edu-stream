@@ -1,4 +1,3 @@
-// routes/subscriptions.ts
 import express from 'express';
 import { stripe } from '../index';
 import { Subscription } from '../models/Subscription';
@@ -15,37 +14,55 @@ const PLANS = {
     priceId: process.env.STRIPE_BASIC_PRICE_ID!,
     name: 'Basic Plan',
     price: 0.01,
+    currency: 'usd',
+    interval: 'month',
     features: ['Access to basic courses', 'Standard support']
   },
   premium: {
     priceId: process.env.STRIPE_PREMIUM_PRICE_ID!,
     name: 'Premium Plan',
     price: 0.02,
+    currency: 'usd',
+    interval: 'month',
     features: ['Access to all courses', 'Priority support', 'Certificates']
   },
   enterprise: {
     priceId: process.env.STRIPE_ENTERPRISE_PRICE_ID!,
     name: 'Enterprise Plan',
     price: 0.03,
+    currency: 'usd',
+    interval: 'month',
     features: ['Everything in Premium', 'Team management', 'Analytics']
   }
 };
 
-// Get available plans
+// Get available plans - FIXED: Return array format
 router.get('/plans', (req, res) => {
-  res.json(PLANS);
+  // Convert plans object to array format expected by frontend
+  const plansArray = Object.entries(PLANS).map(([planType, planData]) => ({
+    id: planType,
+    planType: planType,
+    name: planData.name,
+    price: planData.price,
+    currency: planData.currency,
+    interval: planData.interval,
+    features: planData.features
+  }));
+  
+  res.json(plansArray);
 });
 
-// Get user's subscription
+// Get user's subscription - FIXED: Return proper structure
 router.get('/current', verifyToken, async (req: AuthRequest, res) => {
   try {
     const subscription = await Subscription.findOne({ userId: req.userId }).lean();
-    
+   
     if (!subscription) {
       return res.json({ subscription: null });
     }
 
-    res.json({ subscription });
+    // Return the subscription object directly (not wrapped)
+    res.json(subscription);
   } catch (error: any) {
     console.error('Get subscription error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -56,13 +73,13 @@ router.get('/current', verifyToken, async (req: AuthRequest, res) => {
 router.post('/create', verifyToken, async (req: AuthRequest, res) => {
   try {
     const { planType, paymentMethodId } = req.body;
-    
+   
     if (!PLANS[planType as keyof typeof PLANS]) {
       return res.status(400).json({ error: 'Invalid plan type' });
     }
 
     // Check if user already has an active subscription
-    const existingSubscription = await Subscription.findOne({ 
+    const existingSubscription = await Subscription.findOne({
       userId: req.userId,
       status: { $in: ['active', 'past_due', 'incomplete'] }
     });
@@ -140,11 +157,11 @@ router.post('/create', verifyToken, async (req: AuthRequest, res) => {
 
     // Handle latest_invoice and extract client_secret
     let clientSecret: string | null = null;
-    
+   
     if (stripeSubscription.latest_invoice) {
       const invoice = stripeSubscription.latest_invoice as Stripe.Invoice;
       const paymentIntentId = getPaymentIntentFromInvoice(invoice);
-      
+     
       if (paymentIntentId) {
         const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
         clientSecret = paymentIntent.client_secret;
@@ -165,7 +182,7 @@ router.post('/create', verifyToken, async (req: AuthRequest, res) => {
 // Cancel subscription
 router.post('/cancel', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const subscription = await Subscription.findOne({ 
+    const subscription = await Subscription.findOne({
       userId: req.userId,
       status: { $in: ['active', 'past_due'] }
     });
@@ -199,7 +216,7 @@ router.post('/cancel', verifyToken, async (req: AuthRequest, res) => {
 // Resume subscription
 router.post('/resume', verifyToken, async (req: AuthRequest, res) => {
   try {
-    const subscription = await Subscription.findOne({ 
+    const subscription = await Subscription.findOne({
       userId: req.userId,
       cancelAtPeriodEnd: true
     });
@@ -226,12 +243,12 @@ router.post('/resume', verifyToken, async (req: AuthRequest, res) => {
 router.post('/change-plan', verifyToken, async (req: AuthRequest, res) => {
   try {
     const { planType } = req.body;
-    
+   
     if (!PLANS[planType as keyof typeof PLANS]) {
       return res.status(400).json({ error: 'Invalid plan type' });
     }
 
-    const subscription = await Subscription.findOne({ 
+    const subscription = await Subscription.findOne({
       userId: req.userId,
       status: 'active'
     });
@@ -241,7 +258,7 @@ router.post('/change-plan', verifyToken, async (req: AuthRequest, res) => {
     }
 
     const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
-    
+   
     await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
       items: [{
         id: stripeSubscription.items.data[0].id,
