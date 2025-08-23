@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import axios from 'axios';
+import jwt from 'jsonwebtoken';
 
 export interface AuthRequest extends Request {
   userId?: string;
@@ -9,20 +9,23 @@ export interface AuthRequest extends Request {
 
 export const verifyToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '');
+    const authHeader = req.headers.authorization || '';
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
     
     if (!token) {
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    // Verify token with auth service
-    const response = await axios.get(`${process.env.AUTH_SERVICE_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
+    // Verify JWT directly (same as auth service)
+    const payload = jwt.verify(token, process.env.JWT_SECRET!) as { 
+      userId: string; 
+      role: string; 
+      email: string; 
+    };
 
-    req.userId = response.data._id;
-    req.userEmail = response.data.email;
-    req.userRole = response.data.role;
+    req.userId = payload.userId;
+    req.userEmail = payload.email;
+    req.userRole = payload.role;
     
     next();
   } catch (error) {

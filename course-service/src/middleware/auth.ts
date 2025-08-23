@@ -17,7 +17,11 @@ export const verifyToken = async (req: AuthRequest, res: Response, next: NextFun
 
     // Verify token with auth service
     const response = await axios.get(`${process.env.AUTH_SERVICE_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` }
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Host: 'auth-service',
+        'Content-Type': 'application/json'
+      }
     });
 
     req.userId = response.data._id;

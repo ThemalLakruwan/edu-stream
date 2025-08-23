@@ -78,6 +78,7 @@ services:
       REDIS_URL: redis://:password@redis:6379
       AUTH_SERVICE_URL: http://auth-service:3001
       FRONTEND_URL: http://localhost:3000
+      JWT_SECRET: ${JWT_SECRET:-f584cf7022128b03f15b33ce90f3d0b0bf83d30a3ca68db74e77914c6af9baea323b103752da6880a011003f13084ef2d74d1d52f6c428cb401d396610376db5}
     depends_on:
       - mongodb
       - redis
