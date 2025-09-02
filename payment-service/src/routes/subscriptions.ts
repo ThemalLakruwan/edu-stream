@@ -280,28 +280,29 @@ router.post('/resume', verifyToken, async (req: AuthRequest, res) => {
 router.post('/change-plan', verifyToken, async (req: AuthRequest, res) => {
   try {
     const { planType } = req.body;
-   
+
     if (!PLANS[planType as keyof typeof PLANS]) {
       return res.status(400).json({ error: 'Invalid plan type' });
     }
 
+    // Allow switch if active, trialing, or past_due
     const subscription = await Subscription.findOne({
       userId: req.userId,
-      status: { $in: ['active', 'trialing'] }
+      status: { $in: ['active', 'trialing', 'past_due'] }
     });
 
     if (!subscription) {
-      return res.status(404).json({ error: 'No active subscription found' });
+      return res.status(404).json({ error: 'No active/trialing subscription found' });
     }
 
     const stripeSubscription = await stripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
-   
+
     await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
       items: [{
         id: stripeSubscription.items.data[0].id,
         price: PLANS[planType as keyof typeof PLANS].priceId
       }],
-      proration_behavior: 'create_prorations'
+      proration_behavior: 'create_prorations' // immediate switch with fair proration
     });
 
     subscription.planType = planType as any;
