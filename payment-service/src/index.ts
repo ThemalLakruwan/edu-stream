@@ -17,6 +17,9 @@ export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-07-30.basil'// Cast to any to avoid version compatibility issues
 });
 
+// Trust proxy for Docker/load balancer environments
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 app.use(cors({
@@ -24,10 +27,12 @@ app.use(cors({
   credentials: true
 }));
 
-// Rate limiting
+// Rate limiting - simplified configuration
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use(limiter);
 
@@ -44,8 +49,8 @@ app.use('/webhooks', webhookRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
+  res.status(200).json({
+    status: 'healthy',
     service: 'payment-service',
     timestamp: new Date().toISOString()
   });
@@ -53,7 +58,7 @@ app.get('/health', (req, res) => {
 
 // Error handling
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error(err.stack);
+  console.error('Error stack:', err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
 

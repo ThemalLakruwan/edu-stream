@@ -48,7 +48,7 @@ router.get('/plans', (req, res) => {
     interval: planData.interval,
     features: planData.features
   }));
-  
+ 
   res.json(plansArray);
 });
 
@@ -58,10 +58,10 @@ router.get('/current', verifyToken, async (req: AuthRequest, res) => {
     const subscription = await Subscription.findOne({ userId: req.userId }).lean();
    
     if (!subscription) {
-      return res.json({ subscription: null });
+      return res.json(null); // Return null directly, not wrapped
     }
 
-    // Return the subscription object directly (not wrapped)
+    // Return the subscription object directly
     res.json(subscription);
   } catch (error: any) {
     console.error('Get subscription error:', error);
@@ -69,10 +69,12 @@ router.get('/current', verifyToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Create subscription
+// Create subscription - IMPROVED ERROR HANDLING
 router.post('/create', verifyToken, async (req: AuthRequest, res) => {
   try {
     const { planType, paymentMethodId } = req.body;
+   
+    console.log('Creating subscription request:', { planType, userId: req.userId, userEmail: req.userEmail });
    
     if (!PLANS[planType as keyof typeof PLANS]) {
       return res.status(400).json({ error: 'Invalid plan type' });
@@ -81,7 +83,7 @@ router.post('/create', verifyToken, async (req: AuthRequest, res) => {
     // Check if user already has an active subscription
     const existingSubscription = await Subscription.findOne({
       userId: req.userId,
-      status: { $in: ['active', 'past_due', 'incomplete'] }
+      status: { $in: ['active', 'past_due', 'incomplete', 'trialing'] }
     });
 
     if (existingSubscription) {
@@ -98,74 +100,108 @@ router.post('/create', verifyToken, async (req: AuthRequest, res) => {
 
       if (customers.data.length > 0) {
         customer = customers.data[0];
+        console.log('Found existing customer:', customer.id);
       } else {
         customer = await stripe.customers.create({
           email: req.userEmail!,
           metadata: { userId: req.userId! }
         });
+        console.log('Created new customer:', customer.id);
       }
     } catch (error: any) {
       console.error('Customer creation error:', error);
       return res.status(500).json({ error: 'Failed to create customer' });
     }
 
-    // Attach payment method to customer
+    // Attach payment method to customer (if provided)
     if (paymentMethodId) {
-      await stripe.paymentMethods.attach(paymentMethodId, {
-        customer: customer.id
-      });
+      try {
+        await stripe.paymentMethods.attach(paymentMethodId, {
+          customer: customer.id
+        });
 
-      await stripe.customers.update(customer.id, {
-        invoice_settings: {
-          default_payment_method: paymentMethodId
-        }
-      });
+        await stripe.customers.update(customer.id, {
+          invoice_settings: {
+            default_payment_method: paymentMethodId
+          }
+        });
+        console.log('Payment method attached:', paymentMethodId);
+      } catch (error: any) {
+        console.error('Payment method attach error:', error);
+        return res.status(400).json({ error: 'Failed to attach payment method' });
+      }
     }
 
     // Create subscription
-    const stripeSubscription = await stripe.subscriptions.create({
-      customer: customer.id,
-      items: [{ price: PLANS[planType as keyof typeof PLANS].priceId }],
-      payment_behavior: 'default_incomplete',
-      payment_settings: { save_default_payment_method: 'on_subscription' },
-      expand: ['latest_invoice.payment_intent'], // Expand payment intent directly
-      trial_period_days: 7, // 7-day free trial
-      metadata: { userId: req.userId! }
-    });
+    let stripeSubscription: Stripe.Subscription;
+    try {
+      stripeSubscription = await stripe.subscriptions.create({
+        customer: customer.id,
+        items: [{ price: PLANS[planType as keyof typeof PLANS].priceId }],
+        payment_behavior: 'default_incomplete',
+        payment_settings: { save_default_payment_method: 'on_subscription' },
+        expand: ['latest_invoice.payment_intent'], // Expand payment intent directly
+        trial_period_days: 7, // 7-day free trial
+        metadata: { userId: req.userId! }
+      });
+      console.log('Stripe subscription created:', stripeSubscription.id, 'Status:', stripeSubscription.status);
+    } catch (error: any) {
+      console.error('Stripe subscription creation error:', error);
+      return res.status(500).json({ error: 'Failed to create subscription in Stripe' });
+    }
 
-    // Save subscription to database
-    const subscription = new Subscription({
-      userId: req.userId,
-      stripeCustomerId: customer.id,
-      stripeSubscriptionId: stripeSubscription.id,
-      planType,
-      status: stripeSubscription.status as any,
-      currentPeriodStart: new Date(stripeSubscription.items.data[0].current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSubscription.items.data[0].current_period_end * 1000),
-      trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : undefined
-    });
+    // Save subscription to database with proper status handling
+    try {
+      const subscription = new Subscription({
+        userId: req.userId,
+        stripeCustomerId: customer.id,
+        stripeSubscriptionId: stripeSubscription.id,
+        planType,
+        status: stripeSubscription.status, // This should now handle 'trialing'
+        currentPeriodStart: new Date(stripeSubscription.items.data[0].current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSubscription.items.data[0].current_period_end * 1000),
+        trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : undefined
+      });
 
-    await subscription.save();
+      await subscription.save();
+      console.log('Subscription saved to database:', subscription._id);
 
-    // Publish subscription created event
-    await publishEvent('subscription.created' as any, {
-      userId: req.userId,
-      subscriptionId: subscription._id,
-      planType,
-      status: subscription.status
-    });
+      // Publish subscription created event
+      await publishEvent('subscription.created' as any, {
+        userId: req.userId,
+        subscriptionId: subscription._id,
+        planType,
+        status: subscription.status
+      });
+
+    } catch (error: any) {
+      console.error('Database save error:', error);
+      // Try to cancel the Stripe subscription if DB save fails
+      try {
+        await stripe.subscriptions.cancel(stripeSubscription.id);
+      } catch (cancelError) {
+        console.error('Failed to cancel Stripe subscription after DB error:', cancelError);
+      }
+      return res.status(500).json({ error: 'Failed to save subscription' });
+    }
 
     // Handle latest_invoice and extract client_secret
     let clientSecret: string | null = null;
    
-    if (stripeSubscription.latest_invoice) {
-      const invoice = stripeSubscription.latest_invoice as Stripe.Invoice;
-      const paymentIntentId = getPaymentIntentFromInvoice(invoice);
-     
-      if (paymentIntentId) {
-        const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-        clientSecret = paymentIntent.client_secret;
+    try {
+      if (stripeSubscription.latest_invoice) {
+        const invoice = stripeSubscription.latest_invoice as Stripe.Invoice;
+        const paymentIntentId = getPaymentIntentFromInvoice(invoice);
+       
+        if (paymentIntentId) {
+          const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+          clientSecret = paymentIntent.client_secret;
+          console.log('Client secret extracted for payment intent:', paymentIntentId);
+        }
       }
+    } catch (error: any) {
+      console.error('Error extracting client secret:', error);
+      // Don't fail the entire request for this
     }
 
     res.json({
@@ -173,6 +209,7 @@ router.post('/create', verifyToken, async (req: AuthRequest, res) => {
       clientSecret,
       status: stripeSubscription.status
     });
+
   } catch (error: any) {
     console.error('Create subscription error:', error);
     res.status(500).json({ error: 'Internal server error' });
@@ -184,7 +221,7 @@ router.post('/cancel', verifyToken, async (req: AuthRequest, res) => {
   try {
     const subscription = await Subscription.findOne({
       userId: req.userId,
-      status: { $in: ['active', 'past_due'] }
+      status: { $in: ['active', 'past_due', 'trialing'] }
     });
 
     if (!subscription) {
@@ -250,7 +287,7 @@ router.post('/change-plan', verifyToken, async (req: AuthRequest, res) => {
 
     const subscription = await Subscription.findOne({
       userId: req.userId,
-      status: 'active'
+      status: { $in: ['active', 'trialing'] }
     });
 
     if (!subscription) {

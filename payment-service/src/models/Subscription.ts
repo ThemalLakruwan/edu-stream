@@ -5,7 +5,7 @@ export interface ISubscription extends Document {
   stripeCustomerId: string;
   stripeSubscriptionId: string;
   planType: 'basic' | 'premium' | 'enterprise';
-  status: 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete';
+  status: 'active' | 'past_due' | 'canceled' | 'unpaid' | 'incomplete' | 'trialing' | 'incomplete_expired';
   currentPeriodStart: Date;
   currentPeriodEnd: Date;
   cancelAtPeriodEnd: boolean;
@@ -19,15 +19,15 @@ const SubscriptionSchema: Schema = new Schema({
   userId: { type: String, required: true, index: true },
   stripeCustomerId: { type: String, required: true },
   stripeSubscriptionId: { type: String, required: true, unique: true },
-  planType: { 
-    type: String, 
-    enum: ['basic', 'premium', 'enterprise'], 
-    required: true 
+  planType: {
+    type: String,
+    enum: ['basic', 'premium', 'enterprise'],
+    required: true
   },
-  status: { 
-    type: String, 
-    enum: ['active', 'past_due', 'canceled', 'unpaid', 'incomplete'], 
-    required: true 
+  status: {
+    type: String,
+    enum: ['active', 'past_due', 'canceled', 'unpaid', 'incomplete', 'trialing', 'incomplete_expired'],
+    required: true
   },
   currentPeriodStart: { type: Date, required: true },
   currentPeriodEnd: { type: Date, required: true },
