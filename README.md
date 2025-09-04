@@ -78,7 +78,7 @@ STRIPE_ENTERPRISE_PRICE_ID=price_***
 
 cd docker-compose
 
-docker compose -f docker-compose.dev.yml build --no-cache
+docker compose -f docker-compose.dev.yml build
 
 docker compose -f docker-compose.dev.yml up -d
 
@@ -89,7 +89,7 @@ curl -X GET http://localhost:8080/api/categories
 curl http://localhost:8080/api/courses
 
 when you want to restart,
-docker compose -f docker-compose.dev.yml down -v
+docker compose -f docker-compose.dev.yml down
 and repeat above steps
 
 Run the frontend via npm start
@@ -206,3 +206,4 @@ All should return:
 
 ✅ If you see "healthy" from all three services, your stack is up and running!
 
+⚠️Use this for as test card number: 4000 0025 0000 3155
