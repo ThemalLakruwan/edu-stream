@@ -58,6 +58,7 @@ services:
       S3_ACCESS_KEY: minioadmin
       S3_SECRET_KEY: minioadmin123
       S3_BUCKET: edustream
+      S3_PUBLIC_BASE: 'http://localhost:8080/files'
 
       # CORS
       FRONTEND_URL: http://localhost:3000

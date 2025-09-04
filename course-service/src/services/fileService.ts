@@ -1,4 +1,4 @@
-// course-service/src/services/fileService.ts
+// course-service/src/services/fileService.ts - FIXED VERSION
 import AWS from 'aws-sdk';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -45,22 +45,45 @@ export const uploadFile = async (file: Express.Multer.File, folder: string): Pro
 
   const result = await s3.upload(params).promise();
 
-  // Optional: make a browser-friendly URL if S3_ENDPOINT is internal
-  const publicBase = (process.env.S3_PUBLIC_BASE || process.env.S3_ENDPOINT || '').replace(/\/+$/, '');
-  if (publicBase) return `${publicBase}/${BUCKET}/${key}`;
+  // ✅ FIXED: Use nginx proxy URL, not frontend URL
+  // The files are served through nginx proxy at port 8080, not frontend at 3000
+  const proxyBase = process.env.S3_PUBLIC_BASE || 'http://localhost:8080/files';
+  const publicUrl = `${proxyBase}/${BUCKET}/${key}`;
 
-  // Fallback to SDK's Location (may be internal like http://minio:9000/…)
-  return result.Location;
+  console.log(`File uploaded: ${publicUrl}`);
+  return publicUrl;
 };
 
 export const deleteFile = async (fileUrl: string): Promise<void> => {
   try {
-    // Expect .../<bucket>/<folder>/<file>
-    const parts = fileUrl.split('/');
-    const bucketIdx = parts.findIndex(p => p === BUCKET);
-    const key = bucketIdx >= 0 ? parts.slice(bucketIdx + 1).join('/') : parts.slice(-2).join('/');
+    // Extract key from proxy URL or direct MinIO URL
+    let key: string;
+
+    if (fileUrl.includes('/files/')) {
+      // Proxy URL format: http://localhost:8080/files/edustream/course-thumbnails/uuid-filename.jpg
+      // Extract everything after /files/edustream/
+      const parts = fileUrl.split('/files/');
+      if (parts.length > 1) {
+        const pathAfterFiles = parts[1];
+        // Remove bucket name if present
+        if (pathAfterFiles.startsWith(`${BUCKET}/`)) {
+          key = pathAfterFiles.substring(`${BUCKET}/`.length);
+        } else {
+          key = pathAfterFiles;
+        }
+      } else {
+        throw new Error('Invalid file URL format');
+      }
+    } else {
+      // Fallback: try to extract from direct MinIO URL
+      const parts = fileUrl.split('/');
+      const bucketIdx = parts.findIndex(p => p === BUCKET);
+      key = bucketIdx >= 0 ? parts.slice(bucketIdx + 1).join('/') : parts.slice(-2).join('/');
+    }
+
     await ensureBucket();
     await s3.deleteObject({ Bucket: BUCKET, Key: key }).promise();
+    console.log(`File deleted: ${key}`);
   } catch (error) {
     console.error('Delete file error:', error);
   }
