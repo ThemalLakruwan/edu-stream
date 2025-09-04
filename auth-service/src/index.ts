@@ -11,9 +11,13 @@ import { User, IUser } from './models/User';
 import authRoutes from './routes/auth';
 import { connectDB } from './config/database';
 import { redisClient } from './config/redis';
+import { requireRole } from './middleware/auth';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// ✅ TRUST PROXY: we’re behind nginx (single hop)
+app.set('trust proxy', 1);   // or true
 
 // Security middleware
 app.use(helmet());
@@ -24,36 +28,63 @@ app.use(cors({
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100 // limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // keyGenerator not strictly required now that trust proxy is set,
+  // but safe to keep explicit:
+  // keyGenerator: (req, _res) => req.ip
 });
 app.use(limiter);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Passport configuration - FIXED callback URL
+const ADMIN_SEED: Set<string> = new Set(
+  (process.env.ADMIN_SEED_EMAILS || '')
+    .split(',')
+    .map(s => s.trim().toLowerCase())
+    .filter(Boolean)
+);
+
 passport.use(new GoogleStrategy({
   clientID: process.env.GOOGLE_CLIENT_ID!,
   clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-  // This should match your API gateway routing
   callbackURL: "/api/auth/google/callback"
-}, async (accessToken, refreshToken, profile, done) => {
+}, async (_accessToken, _refreshToken, profile, done) => {
   try {
-    let user = await User.findOne({ googleId: profile.id });
-    
-    if (user) {
-      return done(null, user);
-    } else {
+    const email = profile.emails?.[0]?.value?.toLowerCase();
+    if (!email) return done(new Error('Email not found from Google'), false);
+
+    // Try by googleId or email (so a pre-created admin by email gets linked)
+    let user = await User.findOne({ $or: [{ googleId: profile.id }, { email }] });
+
+    if (!user) {
       user = await User.create({
         googleId: profile.id,
-        email: profile.emails?.[0].value,
+        email,
         name: profile.displayName,
-        avatar: profile.photos?.[0].value,
-        role: 'student'
+        avatar: profile.photos?.[0]?.value,
+        role: ADMIN_SEED.has(email) ? 'admin' : 'student'
       });
-      return done(null, user);
+    } else {
+      if (!user.googleId || user.googleId === '') user.googleId = profile.id;
+      user.name = user.name || profile.displayName;
+      user.avatar = user.avatar || profile.photos?.[0]?.value;
+      try {
+        await user.save();
+      } catch (e: any) {
+        // handle E11000 nicely
+        if (e?.code === 11000) {
+          console.error('Duplicate key while linking googleId:', e?.keyValue);
+          return done(new Error('Account linking conflict'), false);
+        }
+        return done(e, false);
+      }
     }
+
+    return done(null, user);
   } catch (error) {
     console.error('Google strategy error:', error);
     return done(error, false);
@@ -67,8 +98,8 @@ app.use('/', authRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
+  res.status(200).json({
+    status: 'healthy',
     service: 'auth-service',
     timestamp: new Date().toISOString()
   });
@@ -76,11 +107,11 @@ app.get('/health', (req, res) => {
 
 // Root endpoint for API Gateway discovery
 app.get('/', (req, res) => {
-  res.json({ 
-    message: "EduStream Auth Service", 
+  res.json({
+    message: "EduStream Auth Service",
     endpoints: {
       "google_auth": "/google",
-      "callback": "/google/callback", 
+      "callback": "/google/callback",
       "me": "/me",
       "logout": "/logout",
       "refresh": "/refresh"
@@ -99,7 +130,7 @@ async function startServer() {
   try {
     await connectDB();
     await redisClient.connect();
-    
+
     app.listen(PORT, () => {
       console.log(`Auth service running on port ${PORT}`);
     });
