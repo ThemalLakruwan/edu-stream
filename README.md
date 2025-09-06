@@ -207,3 +207,11 @@ All should return:
 ✅ If you see "healthy" from all three services, your stack is up and running!
 
 ⚠️Use this for as test card number: 4000 0025 0000 3155
+
+
+Set Up Minio Bucket Public --> paste this on bash
+01. Invoke-WebRequest https://dl.min.io/client/mc/release/windows-amd64/mc.exe -OutFile mc.exe
+02. .\mc.exe --version
+03. .\mc alias set localminio http://localhost:9000 minioadmin minioadmin123
+04. .\mc policy set download localminio/edustream
+05. .\mc.exe anonymous set download localminio/edustream
