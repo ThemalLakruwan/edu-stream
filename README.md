@@ -24,11 +24,11 @@ Folder structure:
 
 repo-root/
   ├─ docker-compose.dev.yml
-  ├─ docker-compose/           # nginx conf files
+  ├─ docker-compose/          
   ├─ auth-service/
   ├─ course-service/
   ├─ payment-service/
-  └─ frontend/                 # if applicable
+  └─ frontend/                 
 
 2. Create .env files
 
@@ -82,7 +82,7 @@ docker compose -f docker-compose.dev.yml build
 
 docker compose -f docker-compose.dev.yml up -d
 
-docker-compose -f docker-compose.dev.yml exec course-service npm run seed
+docker-compose -f docker-compose.dev.yml exec course-service npm run seed  (❌Run this Only if database is empty)
 
 test courses are loaded by,
 curl -X GET http://localhost:8080/api/categories
@@ -112,24 +112,7 @@ Password: minioadmin123
 
 Create a bucket named edustream (must match S3_BUCKET).
 
-5. (Optional) Enable Stripe webhooks locally
-
-For testing subscription/payment flows:
-
-stripe login
-stripe listen --forward-to http://localhost:3003/webhooks/stripe
-
-
-Stripe CLI will output a signing secret (whsec_...). Put it into:
-
-payment-service/.env → STRIPE_WEBHOOK_SECRET=whsec_...
-
-
-Restart just the payment service:
-
-docker compose -f docker-compose.dev.yml up -d --build payment-service
-
-6. Verify services are up
+5. Verify services are up
 
 Nginx gateway → http://localhost:8080
 
@@ -139,13 +122,13 @@ Course health → http://localhost:3002/health
 
 Payment health → http://localhost:3003/health
 
-MongoDB → localhost:27017
+MongoDB → mongodb+srv://edustream_dev:eduStream101@edustream-dev.fxfatps.mongodb.net
 
 Redis → localhost:6379 (password: password)
 
 MinIO console → http://localhost:9001
 
-7. Common commands
+6. Common commands
 # Rebuild one service after code changes
 docker compose -f docker-compose.dev.yml up -d --build payment-service
 
@@ -158,7 +141,7 @@ docker compose -f docker-compose.dev.yml down
 # Stop and wipe volumes (fresh DB/S3)
 docker compose -f docker-compose.dev.yml down -v
 
-8. Known gotchas (and fixes)
+7. Known gotchas (and fixes)
 
 Redis connection refused in payment-service
 Ensure .env has:
@@ -171,24 +154,6 @@ Ensure STRIPE_WEBHOOK_SECRET is set.
 MinIO 403 or “bucket not found”
 Create the edustream bucket in the console (Step 4).
 Ensure S3_* env vars match.
-
-Ports already in use
-Change host ports in docker-compose.dev.yml.
-
-Windows/WSL2 file permission issues
-Clone inside the WSL2 filesystem. Use Docker Desktop with WSL integration.
-
-9. Sharing with a colleague
-
-Send them:
-
-The repo (minus real secrets)
-
-This guide
-
-A .env bundle with safe test values (or .env.example files)
-
-Optional: Postman collection with example requests
 
 Quick Smoke Test
 # Auth
@@ -209,7 +174,7 @@ All should return:
 ⚠️Use this for as test card number: 4000 0025 0000 3155
 
 
-Set Up Minio Bucket Public --> paste this on bash
+8. Set Up Minio Bucket Public --> paste this on bash
 01. Invoke-WebRequest https://dl.min.io/client/mc/release/windows-amd64/mc.exe -OutFile mc.exe
 02. .\mc.exe --version
 03. .\mc alias set localminio http://localhost:9000 minioadmin minioadmin123
