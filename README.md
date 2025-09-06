@@ -122,7 +122,7 @@ Course health → http://localhost:3002/health
 
 Payment health → http://localhost:3003/health
 
-MongoDB → mongodb+srv://edustream_dev:eduStream101@edustream-dev.fxfatps.mongodb.net
+MongoDB → mongodb+srv://edustream_dev:eduStream101@edustream-dev.xxxxxx.mongodb.net
 
 Redis → localhost:6379 (password: password)
 
