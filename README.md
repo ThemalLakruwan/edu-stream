@@ -1,7 +1,5 @@
 EduStream – Development Setup
 
-This guide explains how to run the project locally using Docker Compose.
-
 0. Prerequisites
 
 Install these tools before starting:
@@ -31,48 +29,6 @@ repo-root/
   └─ frontend/                 
 
 2. Create .env files
-
-Each service has its own .env. These files are in .gitignore. Use the following examples to get started:
-
-auth-service/.env
-
-PORT=3001
-MONGODB_URI=mongodb://admin:password@mongodb:27017/edustream-auth?authSource=admin
-REDIS_URL=redis://:password@redis:6379
-JWT_SECRET=dev_jwt_secret_change_me
-FRONTEND_URL=http://localhost:3000
-
-
-course-service/.env
-
-PORT=3002
-MONGODB_URI=mongodb://admin:password@mongodb:27017/edustream-courses?authSource=admin
-REDIS_URL=redis://:password@redis:6379
-AUTH_SERVICE_URL=http://auth-service:3001
-S3_ENDPOINT=http://minio:9000
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin123
-S3_BUCKET=edustream
-FRONTEND_URL=http://localhost:3000
-
-
-payment-service/.env
-
-PORT=3003
-MONGODB_URI=mongodb://admin:password@mongodb:27017/edustream-payments?authSource=admin
-REDIS_URL=redis://:password@redis:6379
-AUTH_SERVICE_URL=http://auth-service:3001
-FRONTEND_URL=http://localhost:3000
-
-# Stripe
-STRIPE_SECRET_KEY=sk_test_***              
-STRIPE_WEBHOOK_SECRET=whsec_***            
-STRIPE_BASIC_PRICE_ID=price_***
-STRIPE_PREMIUM_PRICE_ID=price_***
-STRIPE_ENTERPRISE_PRICE_ID=price_***
-
-
-⚠️ If you don’t have Stripe IDs yet, the stack will still boot, but subscription endpoints will error until you add them.
 
 3. Start the stack
 
